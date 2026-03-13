@@ -380,6 +380,30 @@ def _run_scrape(job_id: str, domain: str):
 # ---------------------------------------------------------------------------
 
 @mcp.tool
+def scrape_page(url: str) -> str:
+    """
+    Scrape a single URL and return its content immediately.
+
+    Use this to test the scraper or fetch one specific page.
+    Returns title, summary, full_content, and data_points synchronously.
+
+    Args:
+        url: The full URL to scrape, e.g. "https://tradeify.co"
+
+    Returns:
+        A JSON object with url, title, summary, full_content, and data_points.
+    """
+    page = _fetch_static(url)
+    if page is None:
+        page = _fetch_dynamic(url)
+    if page is None:
+        return f"Failed to fetch {url} — page returned no content."
+
+    entry = _extract_page_data(page, url)
+    return json.dumps(entry, indent=2, ensure_ascii=False)
+
+
+@mcp.tool
 def scrape_site(domain: str) -> str:
     """
     Start a website scrape and indexing job. Returns immediately with a job_id.
