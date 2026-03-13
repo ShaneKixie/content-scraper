@@ -98,7 +98,7 @@ def _fetch_static(url: str) -> "Response | None":
     """Fetch with plain HTTP (Webflow and static sites)."""
     try:
         from scrapling.fetchers import Fetcher
-        response = Fetcher.get(url, timeout=30, retries=2)
+        response = Fetcher.get(url, timeout=30, retries=2)  # seconds
         if response.status == 200:
             return response
     except Exception as e:
@@ -114,7 +114,7 @@ def _fetch_dynamic(url: str) -> "Response | None":
             url,
             headless=True,
             network_idle=True,
-            timeout=60,
+            timeout=30000,  # milliseconds (30 seconds)
             disable_resources=True,
         )
         if response.status == 200:
