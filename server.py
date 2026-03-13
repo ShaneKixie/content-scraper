@@ -283,7 +283,12 @@ def _run_scrape(job_id: str, domain: str):
         _jobs[job_id]["status"] = "in_progress"
         logger.info(f"[{job_id}] Starting scrape of {domain}")
 
-        main_domain = domain.lstrip("www.").lstrip("https://").lstrip("http://").split("/")[0]
+        # Strip scheme and www properly
+        main_domain = domain
+        for prefix in ("https://", "http://", "www."):
+            if main_domain.startswith(prefix):
+                main_domain = main_domain[len(prefix):]
+        main_domain = main_domain.split("/")[0]
         help_domain = f"help.{main_domain}"
 
         # ---------------------------------------------------------------
