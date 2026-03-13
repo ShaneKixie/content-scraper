@@ -385,6 +385,92 @@ def _run_scrape(job_id: str, domain: str):
 # ---------------------------------------------------------------------------
 
 @mcp.tool
+def scrape_urls(urls: list[str], domain: str) -> str:
+    """
+    Scrape a specific list of URLs and add them to a site index.
+
+    Use this when you already know the URLs (e.g. from a sitemap or prior crawl)
+    and want to bypass auto-discovery. Useful for JS-rendered help centers like
+    Intercom that don't have sitemaps and are hard to spider.
+
+    Returns immediately with a job_id. Call get_scrape_result when done.
+
+    Args:
+        urls: List of full URLs to scrape.
+        domain: The site domain these URLs belong to, e.g. "tradeify.co".
+                Used to organize results in the index.
+
+    Returns:
+        A message containing the job_id to use with get_scrape_result.
+    """
+    job_id = str(uuid.uuid4())
+    _jobs[job_id] = {"status": "queued", "result": None, "error": None}
+
+    def _run():
+        try:
+            _jobs[job_id]["status"] = "in_progress"
+            logger.info(f"[{job_id}] Scraping {len(urls)} provided URLs for {domain}")
+
+            main_domain = domain
+            for prefix in ("https://", "http://", "www."):
+                if main_domain.startswith(prefix):
+                    main_domain = main_domain[len(prefix):]
+            main_domain = main_domain.split("/")[0]
+
+            index = {
+                "site": main_domain,
+                "scraped_at": datetime.utcnow().isoformat() + "Z",
+                "total_pages": 0,
+                "main_site": {
+                    "homepage": [], "feature_pages": [], "comparison_pages": [],
+                    "blog_index": [], "blog_posts": [], "legal_pages": [], "other_pages": []
+                },
+                "help_center": {"help_articles": []},
+            }
+
+            for i, url in enumerate(urls):
+                logger.info(f"[{job_id}] Fetching {i+1}/{len(urls)}: {url}")
+                is_help = "help." in urlparse(url).netloc
+
+                page = _fetch_static(url)
+                if page is None:
+                    page = _fetch_dynamic(url)
+                if page is None:
+                    logger.warning(f"[{job_id}] Skipping (no content): {url}")
+                    continue
+
+                entry = _extract_page_data(page, url)
+                category = _categorize_url(url, main_domain)
+
+                if category == "help_articles":
+                    index["help_center"]["help_articles"].append(entry)
+                elif category in index["main_site"]:
+                    index["main_site"][category].append(entry)
+                else:
+                    index["main_site"]["other_pages"].append(entry)
+
+            index["help_center"]["help_articles"].sort(key=lambda x: x["title"])
+            total = sum(len(v) for v in index["main_site"].values()) + \
+                    sum(len(v) for v in index["help_center"].values())
+            index["total_pages"] = total
+
+            _jobs[job_id]["status"] = "completed"
+            _jobs[job_id]["result"] = index
+            logger.info(f"[{job_id}] Done. {total} pages indexed.")
+        except Exception as e:
+            logger.error(f"[{job_id}] Failed: {e}", exc_info=True)
+            _jobs[job_id]["status"] = "failed"
+            _jobs[job_id]["error"] = str(e)
+
+    _executor.submit(_run)
+    return (
+        f"Scrape job started for {len(urls)} URLs on {domain}.\n\n"
+        f"job_id: {job_id}\n\n"
+        f"Call `get_scrape_result` with job_id='{job_id}' when done."
+    )
+
+
+@mcp.tool
 def scrape_page(url: str) -> str:
     """
     Scrape a single URL and return its content immediately.
